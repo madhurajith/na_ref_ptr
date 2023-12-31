@@ -30,40 +30,22 @@
 #include <mutex>
 #include <string>
 
+#if _MSC_VER
+#include <intrin.h>
+#endif
+
 namespace na
 {
 
-#if (__cpp_exceptions)
-
-/// @brief Referable after free exception is thrown if the referred object is destroyed with any ref_ptr objects still
-/// referring the destroyed object.
-struct referable_after_free_exception : std::exception
-{
-    referable_after_free_exception(const std::string &msg = "referable after free") : msg(msg)
-    {
-    }
-
-    char const *what() const override
-    {
-        return msg.c_str();
-    }
-
-  private:
-    std::string msg;
-};
-
-#endif
+using referable_after_free_handler = std::function<void()>;
 
 namespace detail
 {
 inline std::mutex referable_after_free_handler_mutex;
 
-inline std::function<void()> referable_after_free_handler = []() {
-#if (__cpp_exceptions)
-    throw referable_after_free_exception{};
-#else
+inline referable_after_free_handler referable_after_free_handler_instance = []() {
+    __debugbreak();
     std::terminate();
-#endif // __cpp_exceptions
 };
 
 } // namespace detail
@@ -74,18 +56,18 @@ inline std::function<void()> referable_after_free_handler = []() {
 
 /// @brief Set a custom referable after free handler
 /// @param handler  New referable after free handler
-inline void set_referable_after_free_handler(const std::function<void()> &handler)
+inline void set_referable_after_free_handler(const referable_after_free_handler &handler)
 {
     const auto lock = std::scoped_lock{detail::referable_after_free_handler_mutex};
-    detail::referable_after_free_handler = handler;
+    detail::referable_after_free_handler_instance = handler;
 }
 
 /// @brief Get referable after free handler
 /// @return Current referable after free handler
-inline std::function<void()> get_referable_after_free_handler()
+inline referable_after_free_handler get_referable_after_free_handler()
 {
     const auto lock = std::scoped_lock{detail::referable_after_free_handler_mutex};
-    return detail::referable_after_free_handler;
+    return detail::referable_after_free_handler_instance;
 }
 
 namespace detail
@@ -121,6 +103,7 @@ class ref_counter
         ++ref_count;
         node->next = head.next;
         node->prev = &head;
+        head.next = node;
     }
 
     void remove_ref(ref_list_node *node) noexcept
@@ -135,6 +118,9 @@ class ref_counter
         {
             node->next->prev = node->prev;
         }
+
+        node->prev = nullptr;
+        node->next = nullptr;
     }
 
     std::size_t get_ref() const
@@ -392,7 +378,12 @@ template <typename type> class ref_ptr
 {
   public:
     /// @brief Constructs an empty ref_ptr.
-    ref_ptr() : ref_count{nullptr}, value{nullptr}
+    ref_ptr()
+        :
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+          ref_count{nullptr},
+#endif
+          value{nullptr}
     {
     }
 
@@ -589,10 +580,9 @@ template <typename type> class ref_ptr
     }
 
     /// @brief Assigns the value from another ref_ptr.
-    /// @tparam other_type The value type of the other ref_ptr
     /// @param other The other ref_ptr object.
     /// @return A reference to this ref_ptr.
-    template <typename other_type> ref_ptr &operator=(const ref_ptr<other_type> &other)
+    ref_ptr &operator=(const ref_ptr &other)
     {
         if (this == &other)
         {
@@ -600,6 +590,11 @@ template <typename type> class ref_ptr
         }
 
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+        if (this->ref_count != nullptr)
+        {
+            remove_ref();
+        }
+
         this->ref_count = other.ref_count;
         if (ref_count != nullptr)
         {
@@ -616,10 +611,91 @@ template <typename type> class ref_ptr
     /// @tparam other_type The value type of the other ref_ptr
     /// @param other The other ref_ptr object.
     /// @return A reference to this ref_ptr.
+    template <typename other_type> ref_ptr &operator=(const ref_ptr<other_type> &other)
+    {
+        if (this == &other)
+        {
+            return *this;
+        }
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+        if (this->ref_count != nullptr)
+        {
+            remove_ref();
+        }
+
+        this->ref_count = other.ref_count;
+        if (ref_count != nullptr)
+        {
+            add_ref();
+        }
+#endif
+
+        this->value = other.value;
+
+        return *this;
+    }
+
+    /// @brief Assigns the value from another ref_ptr.
+    /// @param other The other ref_ptr object.
+    /// @return A reference to this ref_ptr.
+    ref_ptr &operator=(ref_ptr &&other)
+    {
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+        if (this->ref_count != nullptr)
+        {
+            this->remove_ref();
+        }
+
+        this->ref_count = other.ref_count;
+
+#if defined(na_ref_ptr_tracked)
+        if (other.ref_count != nullptr)
+        {
+            other.remove_ref();
+        }
+
+        if (this->ref_count != nullptr)
+        {
+            this->add_ref();
+        }
+#endif
+
+        other.ref_count = nullptr;
+#endif
+
+        this->value = other.value;
+        other.value = nullptr;
+
+        return *this;
+    }
+
+    /// @brief Assigns the value from another ref_ptr.
+    /// @tparam other_type The value type of the other ref_ptr
+    /// @param other The other ref_ptr object.
+    /// @return A reference to this ref_ptr.
     template <typename other_type> ref_ptr &operator=(ref_ptr<other_type> &&other)
     {
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+        if (this->ref_count != nullptr)
+        {
+            this->remove_ref();
+        }
+
         this->ref_count = other.ref_count;
+
+#if defined(na_ref_ptr_tracked)
+        if (other.ref_count != nullptr)
+        {
+            other.remove_ref();
+        }
+
+        if (this->ref_count != nullptr)
+        {
+            this->add_ref();
+        }
+#endif
+
         other.ref_count = nullptr;
 #endif
 
