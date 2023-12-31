@@ -13,52 +13,55 @@ na::ref_ptr\<type\> can also be created to refer to sub objects of the referred 
 New 
 
 ```cpp
-// primitive type boxed in a referable
-na::referable<int> r = {1};
-int r1 = *r;
-na::ref_ptr<int> rp = r;
-int r2 = *rp;
-assert(r1 == r2);
+    // primitive type boxed in a referable
+    na::referable<int> r = {1};
+    int r1 = *r;
+    na::ref_ptr<int> rp = r;
+    int r2 = *rp;
+    EXPECT_EQ(r1 == r2);
 
-// user defined type boxed in a referable
-struct test
-{
-    int a;
-    float b;
-};
+    // user defined type boxed in a referable
+    struct test
+    {
+        int a;
+        float b;
+    };
 
-na::referable<test> t = {2, 5.0f};
+    na::referable<test> t = {2, 5.0f};
 
-// dereferencing the referable
-int ta = t->a;
-assert(ta == 2);
+    // dereferencing the referable
+    int ta = t->a;
+    EXPECT_EQ(ta, 2);
 
-// dereferencing the ref_ptr
-na::ref_ptr<test> tp = t;
-int tb = tp->b;
-assert(tb == 5.0f);
+    // dereferencing the ref_ptr
+    na::ref_ptr<test> tp = t;
+    float tb = tp->b;
+    EXPECT_EQ(tb, 5.0f);
 
-// ref_ptr to a sub object
-na::ref_ptr<int> tp_a = {t, &test::a};
-assert(*tp_a == 2);
+    // ref_ptr to a sub object
+    na::ref_ptr<int> tp_a = {t, &test::a};
+    EXPECT_EQ(*tp_a, 2);
 
-na::ref_ptr<float> tp_b = {tp, &test::b};
-assert(*tp_b == 5.0f);
+    na::ref_ptr<float> tp_b = na::ref_ptr<float>{tp, &test::b};
+    EXPECT_EQ(*tp_b, 5.0f);
 
-// allow safe references using enable_ref_from_this
-struct safely_referable_type : enable_ref_from_this<safely_referable_type>
-{
-    double d;
-    std::string s;
-};
+    // allow safe references using enable_ref_from_this
+    struct safely_referable_type : na::enable_ref_from_this<safely_referable_type>
+    {
+        safely_referable_type(double dd, const std::string& ss) : d(dd), s(ss) {}
 
-na::ref_ptr<safely_referable_type> p = {3.0, "Hello"};
+        double d;
+        std::string s;
+    };
 
-double d = p->d;
-assert(d == 3.0);
+    safely_referable_type srt{3.0, "Hello"};
+    na::ref_ptr<safely_referable_type> p = srt;
 
-std::string s = p->s;
-assert(s == "Hello");
+    double d = p->d;
+    EXPECT_EQ(d, 3.0);
+
+    std::string s = p->s;
+    EXPECT_EQ(s, "Hello");
 ```
 
 This implementation guarantees that the referred object will not be destroyed while any of the the ref_ptr s pointing to that referable object is alive.

@@ -541,10 +541,46 @@ template <typename type> class ref_ptr
 #endif
     }
 
+    /// @brief Constructs a ref_ptr to a sub object of another ref_ptr.
+    /// @tparam other_type The value type of the tother ref_ptr.
+    /// @tparam value_type The value type of the sub object.
+    /// @param other The other ref_ptr object.
+    /// @param mem_var_ptr The member pointer to the sub object.
+    template <typename other_type, typename value_type>
+    ref_ptr(const ref_ptr<other_type> &other, value_type other_type::*mem_var_ptr)
+        :
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+          ref_count{other.ref_count},
+#endif
+          value{&(other.value->*mem_var_ptr)}
+    {
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+        if (ref_count != nullptr)
+        {
+            add_ref();
+        }
+#endif
+    }
+
     /// @brief Constructs a ref_ptr from another ref_ptr.
     /// @tparam other_type The value type of the tother ref_ptr.
     /// @param other The other ref_ptr object.
     template <typename other_type> ref_ptr(ref_ptr<other_type> &&other) : ref_count{other.ref_count}, value{other.value}
+    {
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+        other.ref_count = nullptr;
+#endif
+        other.value = nullptr;
+    }
+
+    /// @brief Constructs a ref_ptr to a sub object of another ref_ptr.
+    /// @tparam other_type The value type of the tother ref_ptr.
+    /// @tparam value_type The value type of the sub object.
+    /// @param other The other ref_ptr object.
+    /// @param mem_var_ptr The member pointer to the sub object.
+    template <typename other_type, typename value_type>
+    ref_ptr(ref_ptr<other_type> &&other, value_type other_type::*mem_var_ptr)
+        : ref_count{other.ref_count}, value{&(other.value->*mem_var_ptr)}
     {
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
         other.ref_count = nullptr;
@@ -683,6 +719,8 @@ template <typename type> class ref_ptr
         ref_count->remove_ref(&list_node);
 #endif // na_ref_ptr_counted or na_ref_ptr_tracked
     }
+
+    template <typename other_type> friend class ref_ptr;
 
 #if defined(na_ref_ptr_counted)
     std::atomic_size_t *ref_count;
