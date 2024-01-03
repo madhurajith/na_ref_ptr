@@ -179,7 +179,7 @@ template <typename type> class referable
     /// @param val The value to copy into the referable object
     /// @param loc The source location of the referable object
     referable(const type &val
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
               ,
               const std::source_location &loc = std::source_location::current()
 #endif
@@ -198,7 +198,7 @@ template <typename type> class referable
     /// @param val The value to move into the referable object.
     /// @param loc The source location of the referable object.
     referable(type &&val
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
               ,
               const std::source_location &loc = std::source_location::current()
 #endif
@@ -477,7 +477,7 @@ template <typename type> class ref_ptr
   public:
     /// @brief Constructs an empty ref_ptr.
     ref_ptr(
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
         const std::source_location &loc = std::source_location::current()
 #endif
             )
@@ -497,7 +497,7 @@ template <typename type> class ref_ptr
     /// @param ref The referable object.
     template <typename ref_type>
     ref_ptr(referable<ref_type> &ref
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -519,7 +519,7 @@ template <typename type> class ref_ptr
     /// @param ref The referable object.
     template <typename ref_type>
     ref_ptr(const referable<ref_type> &ref
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -542,7 +542,7 @@ template <typename type> class ref_ptr
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
     ref_ptr(referable<ref_type> &ref, value_type ref_type::*mem_var_ptr
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -565,7 +565,7 @@ template <typename type> class ref_ptr
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
     ref_ptr(const referable<ref_type> &ref, value_type ref_type::*mem_var_ptr
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -592,7 +592,7 @@ template <typename type> class ref_ptr
     /// @param ref The enable_ref_from_this object.
     template <typename ref_type>
     ref_ptr(enable_ref_from_this<ref_type> &ref
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -615,7 +615,7 @@ template <typename type> class ref_ptr
     /// @param ref The enable_ref_from_this object.
     template <typename ref_type>
     ref_ptr(const enable_ref_from_this<ref_type> &ref
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -640,7 +640,7 @@ template <typename type> class ref_ptr
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
     ref_ptr(enable_ref_from_this<ref_type> &ref, value_type ref_type::*mem_var_ptr
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -664,7 +664,7 @@ template <typename type> class ref_ptr
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
     ref_ptr(const enable_ref_from_this<ref_type> &ref, value_type ref_type::*mem_var_ptr
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -691,7 +691,7 @@ template <typename type> class ref_ptr
     /// @param other The other ref_ptr object.
     template <typename other_type>
     ref_ptr(const ref_ptr<other_type> &other
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -720,7 +720,7 @@ template <typename type> class ref_ptr
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename other_type, typename value_type>
     ref_ptr(const ref_ptr<other_type> &other, value_type other_type::*mem_var_ptr
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -747,7 +747,7 @@ template <typename type> class ref_ptr
     /// @param other The other ref_ptr object.
     template <typename other_type>
     ref_ptr(ref_ptr<other_type> &&other
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
@@ -774,7 +774,7 @@ template <typename type> class ref_ptr
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename other_type, typename value_type>
     ref_ptr(ref_ptr<other_type> &&other, value_type other_type::*mem_var_ptr
-#ifdef na_ref_ptr_tracked
+#if defined(na_ref_ptr_tracked)
             ,
             const std::source_location &loc = std::source_location::current()
 #endif
