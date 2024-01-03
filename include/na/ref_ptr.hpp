@@ -22,28 +22,25 @@
 #include <atomic>
 #endif
 
-#if (__cpp_exceptions)
-#include <exception>
+#if defined(na_ref_ptr_tracked)
+#include <source_location>
 #endif
 
 #include <functional>
 #include <mutex>
 #include <string>
 
-#if _MSC_VER
-#include <intrin.h>
-#endif
-
 namespace na
 {
 
-using referable_after_free_handler = std::function<void()>;
+using referable_after_free_handler = std::function<void(const std::string &)>;
 
 namespace detail
 {
 inline std::mutex referable_after_free_handler_mutex;
 
-inline referable_after_free_handler referable_after_free_handler_instance = []() {
+inline referable_after_free_handler referable_after_free_handler_instance = [](const std::string &msg) {
+    std::fputs(msg.c_str(), stderr);
     __debugbreak();
     std::terminate();
 };
@@ -85,14 +82,20 @@ namespace tracked
 
 struct ref_list_node
 {
+    ref_list_node(const std::source_location &loc)
+    {
+        location = loc;
+    }
+
     ref_list_node *prev = nullptr;
     ref_list_node *next = nullptr;
+    std::source_location location;
 };
 
 class ref_counter
 {
   public:
-    explicit ref_counter(size_t count) : ref_count{count}
+    explicit ref_counter(size_t count, const std::source_location loc) : ref_count{count}, head(loc)
     {
     }
 
@@ -128,6 +131,29 @@ class ref_counter
         return ref_count;
     }
 
+    std::string get_referable_after_free_message() const
+    {
+        using namespace std::string_literals;
+
+        std::string ret = "Referable after free detected.\n"
+                          "The referable was destroyed while there were still references to it.\n"
+                          "The number of references is " +
+                          std::to_string(ref_count) +
+                          ".\n"
+                          "The referable destroyed:\n" +
+                          "  " + head.location.file_name() + ":" + std::to_string(head.location.line()) + "\n" +
+                          "Active references:" + "\n";
+
+        ref_list_node *node = head.next;
+        while (node != nullptr)
+        {
+            ret += "  "s + node->location.file_name() + ":" + std::to_string(node->location.line()) + "\n";
+            node = node->next;
+        }
+
+        return ret;
+    }
+
   private:
     std::mutex mutex;
     std::size_t ref_count = 0;
@@ -149,16 +175,41 @@ class ref_counter
 template <typename type> class referable
 {
   public:
-    /// @brief Constructs a referable object by direct initializing the value by forwarding arguments.
-    /// @tparam ...arguments Argument types
-    /// @param ...args Arguments for the value constructor
-    template <typename... arguments>
-    referable(arguments &&...args)
-        :
-#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
-          ref_count{0},
+    /// @brief Constructs a referable object by copying the value.
+    /// @param val The value to copy into the referable object
+    /// @param loc The source location of the referable object
+    referable(const type &val
+#ifdef na_ref_ptr_tracked
+              ,
+              const std::source_location &loc = std::source_location::current()
 #endif
-          value{std::forward<arguments>(args)...}
+                  )
+        :
+#if defined(na_ref_ptr_counted)
+          ref_count{0},
+#elif defined(na_ref_ptr_tracked)
+          ref_count(0, loc),
+#endif
+          value{val}
+    {
+    }
+
+    /// @brief Constructs a referable object by moving the value.
+    /// @param val The value to move into the referable object.
+    /// @param loc The source location of the referable object.
+    referable(type &&val
+#ifdef na_ref_ptr_tracked
+              ,
+              const std::source_location &loc = std::source_location::current()
+#endif
+                  )
+        :
+#if defined(na_ref_ptr_counted)
+          ref_count{0},
+#elif defined(na_ref_ptr_tracked)
+          ref_count(0, loc),
+#endif
+          value{std::move(val)}
     {
     }
 
@@ -169,12 +220,12 @@ template <typename type> class referable
 #if defined(na_ref_ptr_counted)
         if (ref_count != 0)
         {
-            get_referable_after_free_handler()();
+            get_referable_after_free_handler()("Referable after free detected");
         }
 #elif defined(na_ref_ptr_tracked)
         if (ref_count.get_ref() != 0)
         {
-            get_referable_after_free_handler()();
+            get_referable_after_free_handler()(ref_count.get_referable_after_free_message());
         }
 #endif
     }
@@ -182,7 +233,20 @@ template <typename type> class referable
     /// @brief Constructs a referable object by copying the value from another referable object.
     /// @tparam other_type The value type of the other referable object
     /// @param other The other referable object
-    template <typename other_type> referable(const referable<other_type> &other) : ref_count(0), value(other.value)
+    template <typename other_type>
+    referable(const referable<other_type> &other
+#if defined(na_ref_ptr_tracked)
+              ,
+              const std::source_location &loc = std::source_location::current()
+#endif
+                  )
+        :
+#if defined(na_ref_ptr_counted)
+          ref_count(0),
+#elif defined(na_ref_ptr_tracked)
+          ref_count(0, loc),
+#endif
+          value(other.value)
     {
     }
 
@@ -190,7 +254,19 @@ template <typename type> class referable
     /// @tparam other_type The value type of the other referable object
     /// @param other The other referable object
     template <typename other_type>
-    referable(referable<other_type> &&other) : ref_count(0), value(std::move(other.value))
+    referable(referable<other_type> &&other
+#if defined(na_ref_ptr_tracked)
+              ,
+              const std::source_location &loc = std::source_location::current()
+#endif
+                  )
+        :
+#if defined(na_ref_ptr_counted)
+          ref_count(0),
+#elif defined(na_ref_ptr_tracked)
+          ref_count(0, loc),
+#endif
+          value(std::move(other.value))
     {
     }
 
@@ -280,13 +356,33 @@ template <class type> class enable_ref_from_this
   public:
     /// @brief Copy constructor.
     /// @param other The other enable_ref_from_this object
-    enable_ref_from_this([[maybe_unused]] const enable_ref_from_this &other) : ref_count{0}
+    enable_ref_from_this([[maybe_unused]] const enable_ref_from_this &other
+#if defined(na_ref_ptr_tracked)
+                         ,
+                         const std::source_location &loc = std::source_location::current()
+#endif
+                             )
+#if defined(na_ref_ptr_counted)
+        : ref_count{0}
+#elif defined(na_ref_ptr_tracked)
+        : ref_count(0, loc)
+#endif
     {
     }
 
     /// @brief Move constructor.
     /// @param other The other enable_ref_from_this object
-    enable_ref_from_this([[maybe_unused]] enable_ref_from_this &&other) : ref_count{0}
+    enable_ref_from_this([[maybe_unused]] enable_ref_from_this &&other
+#if defined(na_ref_ptr_tracked)
+                         ,
+                         const std::source_location &loc = std::source_location::current()
+#endif
+                             )
+#if defined(na_ref_ptr_counted)
+        : ref_count{0}
+#elif defined(na_ref_ptr_tracked)
+        : ref_count(0, loc)
+#endif
     {
     }
 
@@ -309,12 +405,12 @@ template <class type> class enable_ref_from_this
 #if defined(na_ref_ptr_counted)
         if (ref_count != 0)
         {
-            get_referable_after_free_handler()();
+            get_referable_after_free_handler()("Referable after free detected");
         }
 #elif defined(na_ref_ptr_tracked)
         if (ref_count.get_ref() != 0)
         {
-            get_referable_after_free_handler()();
+            get_referable_after_free_handler()(ref_count.get_referable_after_free_message());
         }
 #endif
     }
@@ -335,8 +431,10 @@ template <class type> class enable_ref_from_this
 
   protected:
     enable_ref_from_this()
-#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+#if defined(na_ref_ptr_counted)
         : ref_count{0}
+#elif defined(na_ref_ptr_tracked)
+        : ref_count(0, std::source_location::current())
 #endif
           {};
 
@@ -378,10 +476,17 @@ template <typename type> class ref_ptr
 {
   public:
     /// @brief Constructs an empty ref_ptr.
-    ref_ptr()
+    ref_ptr(
+#ifdef na_ref_ptr_tracked
+        const std::source_location &loc = std::source_location::current()
+#endif
+            )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{nullptr},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{nullptr}
     {
@@ -391,10 +496,18 @@ template <typename type> class ref_ptr
     /// @tparam ref_type The value type of the referable object.
     /// @param ref The referable object.
     template <typename ref_type>
-    ref_ptr(referable<ref_type> &ref)
+    ref_ptr(referable<ref_type> &ref
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&ref.value}
     {
@@ -405,10 +518,18 @@ template <typename type> class ref_ptr
     /// @tparam ref_type The value type of the referable object.
     /// @param ref The referable object.
     template <typename ref_type>
-    ref_ptr(const referable<ref_type> &ref)
+    ref_ptr(const referable<ref_type> &ref
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&ref.value}
     {
@@ -420,10 +541,18 @@ template <typename type> class ref_ptr
     /// @param ref The referable object.
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
-    ref_ptr(referable<ref_type> &ref, value_type ref_type::*mem_var_ptr)
+    ref_ptr(referable<ref_type> &ref, value_type ref_type::*mem_var_ptr
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&(ref.value.*mem_var_ptr)}
     {
@@ -435,8 +564,20 @@ template <typename type> class ref_ptr
     /// @param ref The referable object.
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
-    ref_ptr(const referable<ref_type> &ref, value_type ref_type::*mem_var_ptr)
-        : ref_count{&ref.ref_count}, value{&(ref.value.*mem_var_ptr)}
+    ref_ptr(const referable<ref_type> &ref, value_type ref_type::*mem_var_ptr
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
+        :
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+          ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
+#endif
+          value{&(ref.value.*mem_var_ptr)}
     {
         add_ref();
     }
@@ -450,10 +591,18 @@ template <typename type> class ref_ptr
     /// @tparam ref_type The value type of enable_ref_from_this.
     /// @param ref The enable_ref_from_this object.
     template <typename ref_type>
-    ref_ptr(enable_ref_from_this<ref_type> &ref)
+    ref_ptr(enable_ref_from_this<ref_type> &ref
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&static_cast<ref_type &>(ref)}
     {
@@ -465,10 +614,18 @@ template <typename type> class ref_ptr
     /// @tparam ref_type The value type of enable_ref_from_this.
     /// @param ref The enable_ref_from_this object.
     template <typename ref_type>
-    ref_ptr(const enable_ref_from_this<ref_type> &ref)
+    ref_ptr(const enable_ref_from_this<ref_type> &ref
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&static_cast<const ref_type &>(ref)}
     {
@@ -482,10 +639,18 @@ template <typename type> class ref_ptr
     /// @param ref The enable_ref_from_this object.
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
-    ref_ptr(enable_ref_from_this<ref_type> &ref, value_type ref_type::*mem_var_ptr)
+    ref_ptr(enable_ref_from_this<ref_type> &ref, value_type ref_type::*mem_var_ptr
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&(ref.value->*mem_var_ptr)}
     {
@@ -498,10 +663,18 @@ template <typename type> class ref_ptr
     /// @param ref The enable_ref_from_this object.
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename ref_type, typename value_type>
-    ref_ptr(const enable_ref_from_this<ref_type> &ref, value_type ref_type::*mem_var_ptr)
+    ref_ptr(const enable_ref_from_this<ref_type> &ref, value_type ref_type::*mem_var_ptr
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{&ref.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&(ref.value->*mem_var_ptr)}
     {
@@ -517,10 +690,18 @@ template <typename type> class ref_ptr
     /// @tparam other_type The value type of the tother ref_ptr.
     /// @param other The other ref_ptr object.
     template <typename other_type>
-    ref_ptr(const ref_ptr<other_type> &other)
+    ref_ptr(const ref_ptr<other_type> &other
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{other.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{other.value}
     {
@@ -538,10 +719,18 @@ template <typename type> class ref_ptr
     /// @param other The other ref_ptr object.
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename other_type, typename value_type>
-    ref_ptr(const ref_ptr<other_type> &other, value_type other_type::*mem_var_ptr)
+    ref_ptr(const ref_ptr<other_type> &other, value_type other_type::*mem_var_ptr
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
         :
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
           ref_count{other.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
 #endif
           value{&(other.value->*mem_var_ptr)}
     {
@@ -556,7 +745,21 @@ template <typename type> class ref_ptr
     /// @brief Constructs a ref_ptr from another ref_ptr.
     /// @tparam other_type The value type of the tother ref_ptr.
     /// @param other The other ref_ptr object.
-    template <typename other_type> ref_ptr(ref_ptr<other_type> &&other) : ref_count{other.ref_count}, value{other.value}
+    template <typename other_type>
+    ref_ptr(ref_ptr<other_type> &&other
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
+        :
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+          ref_count{other.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
+#endif
+          value{other.value}
     {
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
         other.ref_count = nullptr;
@@ -570,8 +773,20 @@ template <typename type> class ref_ptr
     /// @param other The other ref_ptr object.
     /// @param mem_var_ptr The member pointer to the sub object.
     template <typename other_type, typename value_type>
-    ref_ptr(ref_ptr<other_type> &&other, value_type other_type::*mem_var_ptr)
-        : ref_count{other.ref_count}, value{&(other.value->*mem_var_ptr)}
+    ref_ptr(ref_ptr<other_type> &&other, value_type other_type::*mem_var_ptr
+#ifdef na_ref_ptr_tracked
+            ,
+            const std::source_location &loc = std::source_location::current()
+#endif
+                )
+        :
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+          ref_count{other.ref_count},
+#endif
+#if defined(na_ref_ptr_tracked)
+          list_node{loc},
+#endif
+          value{&(other.value->*mem_var_ptr)}
     {
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
         other.ref_count = nullptr;

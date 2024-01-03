@@ -23,7 +23,7 @@ TEST(na_ref_ptr_test_suit, documentation_tests)
         float b;
     };
 
-    na::referable<test> t = {2, 5.0f};
+    na::referable<test> t = {{2, 5.0f}};
 
     // dereferencing the referable
     int ta = t->a;
@@ -77,7 +77,7 @@ TEST(na_ref_ptr_test_suit, referable_construction)
     na::ref_ptr<const a> p2 = r2;
     EXPECT_EQ(p2->v, 23);
 
-    na::referable<a> r3{17};
+    na::referable<a> r3{{17}};
     na::ref_ptr<a> p3 = r3;
     EXPECT_EQ(p3->v, 17);
 
@@ -91,7 +91,7 @@ TEST(na_ref_ptr_test_suit, referable_construction)
         int x, y;
     };
 
-    na::referable<b> r4(17, 43);
+    na::referable<b> r4{{17, 43}};
     na::ref_ptr<b> p4 = r4;
     EXPECT_EQ(p4->x, 17);
     EXPECT_EQ(p4->y, 43);
@@ -121,7 +121,7 @@ TEST(na_ref_ptr_test_suit, ref_ptr_construction)
         double d;
     };
 
-    na::referable<a> r1{3, 5.0};
+    na::referable<a> r1{{3, 5.0}};
     na::ref_ptr<a> p1{r1};
     EXPECT_EQ(p1->i, 3);
     EXPECT_EQ(p1->d, 5.0);

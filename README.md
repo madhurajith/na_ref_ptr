@@ -27,7 +27,7 @@ New
         float b;
     };
 
-    na::referable<test> t = {2, 5.0f};
+    na::referable<test> t = {{2, 5.0f}};
 
     // dereferencing the referable
     int ta = t->a;

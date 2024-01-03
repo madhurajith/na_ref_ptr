@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Namal Bambarasinghe
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -19,11 +19,11 @@ void make_referable_after_free_tracked()
 TEST(na_ref_ptr_test_suit, referable_after_free_test)
 {
     bool referable_after_free_detected = false;
-    na::set_referable_after_free_handler([&referable_after_free_detected](){
+    na::set_referable_after_free_handler([&referable_after_free_detected](const std::string &msg) {
         referable_after_free_detected = true;
     });
 
     make_referable_after_free_tracked();
-    
+
     EXPECT_EQ(referable_after_free_detected, true);
 }
