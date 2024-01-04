@@ -88,6 +88,11 @@ TEST(na_ref_ptr_test_suit, referable_construction)
         int v;
     };
 
+    struct d : a
+    {
+        float f;
+    };
+
     a a1{42};
     na::referable<a> r1{a1};
     na::ref_ptr<a> p1 = r1;
@@ -116,6 +121,46 @@ TEST(na_ref_ptr_test_suit, referable_construction)
     na::ref_ptr<b> p4 = r4;
     EXPECT_EQ(p4->x, 17);
     EXPECT_EQ(p4->y, 43);
+
+    na::referable<d> r5{{{32}, 42.0f}};
+    na::ref_ptr<d> p5 = r5;
+
+    na::referable<a> r6 = r5;
+    na::ref_ptr<a> p6 = r6;
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(p5.use_count(), 1);
+    EXPECT_EQ(p6.use_count(), 1);
+#endif
+
+    na::referable<d> r7{{{55}, 65.0f}};
+    r7 = r5;
+    na::ref_ptr<d> p7 = r7;
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(p7.use_count(), 1);
+#endif
+
+    na::referable<a> r8{{223}};
+    r8 = r5;
+    na::ref_ptr<a> p8 = r8;
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(p8.use_count(), 1);
+#endif
+
+    p8 = p7;
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(p8.use_count(), 2);
+#endif
+
+    na::ref_ptr<a> p9 = r7;
+    p9 = p7;
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(p9.use_count(), 3);
+#endif
 }
 
 TEST(na_ref_ptr_test_suit, enable_ref_from_this_construction)

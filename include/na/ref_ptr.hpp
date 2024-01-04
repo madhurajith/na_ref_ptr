@@ -162,6 +162,8 @@ class ref_counter
 
 #endif
 
+template <typename type> class ref_ptr;
+
 /// @brief referable<type> type boxes a value so that safe references can be made to the contained value using
 /// ref_ptr.
 ///
@@ -271,12 +273,35 @@ template <typename type> class referable
     }
 
     /// @brief Assigns the value from another referable object.
+    /// @param other The other referable object
+    /// @return A reference to this referable object
+    referable &operator=(const referable &other)
+    {
+        if(this == &other)
+        {
+            return *this;
+        }
+
+        value = other.value;
+        return *this;
+    }
+
+    /// @brief Assigns the value from another referable object.
     /// @tparam other_type The value type of the other referable object
     /// @param other The other referable object
     /// @return A reference to this referable object
     template <typename other_type> referable &operator=(const referable<other_type> &other)
     {
         value = other.value;
+        return *this;
+    }
+
+    /// @brief Assigns the value from another referable object by moving the value.
+    /// @param other The other referable object
+    /// @return A reference to this referable object
+    referable &operator=(referable &&other)
+    {
+        value = std::move(other.value);
         return *this;
     }
 
@@ -333,6 +358,7 @@ template <typename type> class referable
     }
 
   private:
+    template <typename other_type> friend class referable;
     template <typename ref_type> friend class ref_ptr;
 
 #if defined(na_ref_ptr_counted)
@@ -828,11 +854,6 @@ template <typename type> class ref_ptr
     /// @return A reference to this ref_ptr.
     template <typename other_type> ref_ptr &operator=(const ref_ptr<other_type> &other)
     {
-        if (this == &other)
-        {
-            return *this;
-        }
-
 #if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
         if (this->ref_count != nullptr)
         {
