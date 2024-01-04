@@ -16,6 +16,10 @@ TEST(na_ref_ptr_test_suit, documentation_tests)
     int r2 = *rp;
     EXPECT_EQ(r1, r2);
 
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(rp.use_count(), 1);
+#endif
+
     // user defined type boxed in a referable
     struct test
     {
@@ -34,17 +38,30 @@ TEST(na_ref_ptr_test_suit, documentation_tests)
     float tb = tp->b;
     EXPECT_EQ(tb, 5.0f);
 
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(tp.use_count(), 1);
+#endif
     // ref_ptr to a sub object
     na::ref_ptr<int> tp_a = {t, &test::a};
     EXPECT_EQ(*tp_a, 2);
 
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(tp.use_count(), 2);
+#endif
+
     na::ref_ptr<float> tp_b = na::ref_ptr<float>{tp, &test::b};
     EXPECT_EQ(*tp_b, 5.0f);
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(tp.use_count(), 3);
+#endif
 
     // allow safe references using enable_ref_from_this
     struct safely_referable_type : na::enable_ref_from_this<safely_referable_type>
     {
-        safely_referable_type(double dd, const std::string& ss) : d(dd), s(ss) {}
+        safely_referable_type(double dd, const std::string &ss) : d(dd), s(ss)
+        {
+        }
 
         double d;
         std::string s;
@@ -58,6 +75,10 @@ TEST(na_ref_ptr_test_suit, documentation_tests)
 
     std::string s = p->s;
     EXPECT_EQ(s, "Hello");
+
+#if defined(na_ref_ptr_counted) || defined(na_ref_ptr_tracked)
+    EXPECT_EQ(p.use_count(), 1);
+#endif
 }
 
 TEST(na_ref_ptr_test_suit, referable_construction)

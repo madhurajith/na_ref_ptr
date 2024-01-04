@@ -126,7 +126,7 @@ class ref_counter
         node->next = nullptr;
     }
 
-    std::size_t get_ref() const
+    std::size_t use_count() const
     {
         return ref_count;
     }
@@ -223,7 +223,7 @@ template <typename type> class referable
             get_referable_after_free_handler()("Referable after free detected");
         }
 #elif defined(na_ref_ptr_tracked)
-        if (ref_count.get_ref() != 0)
+        if (ref_count.use_count() != 0)
         {
             get_referable_after_free_handler()(ref_count.get_referable_after_free_message());
         }
@@ -408,7 +408,7 @@ template <class type> class enable_ref_from_this
             get_referable_after_free_handler()("Referable after free detected");
         }
 #elif defined(na_ref_ptr_tracked)
-        if (ref_count.get_ref() != 0)
+        if (ref_count.use_count() != 0)
         {
             get_referable_after_free_handler()(ref_count.get_referable_after_free_message());
         }
@@ -948,6 +948,24 @@ template <typename type> class ref_ptr
     operator bool() const noexcept
     {
         return value != nullptr;
+    }
+
+    /// @brief Returns the use count of the referable. 0 is returned if ref_ptr is not pointing to a valid object.
+    /// @return The use count of the referable.
+    std::size_t use_count() const
+    {
+#ifdef na_ref_ptr_counted
+        if (ref_count != nullptr)
+        {
+            return *ref_count;
+        }
+#elif defined(na_ref_ptr_tracked)
+        if (ref_count != nullptr)
+        {
+            return ref_count->use_count();
+        }
+#endif
+        return 0;
     }
 
     /// @brief Accesses the value pointed by the ref_ptr.
